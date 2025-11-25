@@ -1,0 +1,5 @@
+# Ignore local test suites
+/tests/
+
+# Python virtual environment
+.venv/
