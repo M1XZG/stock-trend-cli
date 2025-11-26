@@ -1,6 +1,6 @@
 # Stock Trend CLI
 
-![Stock trend web UI overview](assets/web-ui.png)
+![Stock trend web UI overview](assets/web-ui.gif)
 
 A lightweight command-line helper that fetches the current stock price for a ticker symbol and prints an ASCII chart of recent daily closes. Data is retrieved directly from the Yahoo Finance chart API using Python's standard library only.
 
