@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Stock Trend Dot Matrix</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <header>
+        <h1>Stock Trend Dot Matrix</h1>
+        <p>
+          This retro dot-matrix display scrolls through the configured stock symbols. Data updates every minute.
+        </p>
+        <p class="status" id="status">Loading quotes…</p>
+      </header>
+
+      <section class="display">
+        <canvas id="matrix" width="64" height="32" aria-label="Dot matrix display"></canvas>
+      </section>
+
+      <footer>
+        <p>
+          Powered by Yahoo Finance chart data. Remember this feed may be delayed and is provided for demonstration purposes only.
+        </p>
+      </footer>
+    </main>
+    <script src="app.js" type="module"></script>
+  </body>
+</html>
