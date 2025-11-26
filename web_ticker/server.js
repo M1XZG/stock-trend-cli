@@ -147,6 +147,7 @@ function parseArguments(argv) {
 function createServer(options) {
   const app = express();
   const symbols = options.symbols;
+  let refreshMs = options.refreshMs;
 
   const state = {
     quotes: [],
@@ -155,10 +156,20 @@ function createServer(options) {
   };
 
   let refreshInFlight = null;
+  let timer = null;
+
+  const stopTimer = () => {
+    if (timer) {
+      clearInterval(timer);
+      timer = null;
+    }
+  };
+
+  app.use(express.json());
 
   async function refreshQuotes(force = false) {
     const now = Date.now();
-    if (!force && state.quotes.length && now - state.updatedAt < options.refreshMs) {
+    if (!force && state.quotes.length && now - state.updatedAt < refreshMs) {
       return;
     }
 
@@ -188,14 +199,19 @@ function createServer(options) {
     console.warn("Initial quote refresh failed:", error.message);
   });
 
-  const timer = setInterval(() => {
-    refreshQuotes().catch((error) => {
-      console.warn("Quote refresh error:", error.message);
-    });
-  }, options.refreshMs);
-  if (typeof timer.unref === "function") {
-    timer.unref();
-  }
+  const startTimer = () => {
+    stopTimer();
+    timer = setInterval(() => {
+      refreshQuotes().catch((error) => {
+        console.warn("Quote refresh error:", error.message);
+      });
+    }, refreshMs);
+    if (typeof timer.unref === "function") {
+      timer.unref();
+    }
+  };
+
+  startTimer();
 
   app.use(express.static(path.join(__dirname, "public")));
 
@@ -226,7 +242,7 @@ function createServer(options) {
       res.json({
         updatedAt: state.updatedAt,
         quotes: state.quotes,
-        refreshMs: options.refreshMs,
+        refreshMs,
       });
     } catch (error) {
       res.status(502).json({
@@ -235,11 +251,41 @@ function createServer(options) {
     }
   });
 
+  app.post("/api/settings/refresh", async (req, res) => {
+    const raw =
+      (req.body && (req.body.minutes ?? req.body.refreshMinutes)) ??
+      req.query.minutes ??
+      req.query.refreshMinutes;
+
+    const minutes = Number(raw);
+    if (!Number.isFinite(minutes)) {
+      res.status(400).json({ error: "Refresh minutes must be numeric" });
+      return;
+    }
+
+    if (minutes < 5 || minutes > 720) {
+      res.status(400).json({ error: "Refresh minutes must be between 5 and 720" });
+      return;
+    }
+
+    const newRefreshMs = Math.round(minutes * 60 * 1000);
+    if (newRefreshMs !== refreshMs) {
+      refreshMs = newRefreshMs;
+      startTimer();
+      refreshQuotes(true).catch((error) => {
+        console.warn("Immediate refresh after interval change failed:", error.message);
+      });
+    }
+
+    res.json({ refreshMs, refreshMinutes: Math.round(refreshMs / 60000) });
+  });
+
   // fallback to index.html for root
   app.get("*", (req, res) => {
     res.sendFile(path.join(__dirname, "public", "index.html"));
   });
 
+  app.locals.stopTimer = stopTimer;
   return app;
 }
 
@@ -273,6 +319,12 @@ async function main() {
   });
 
   const signals = ["SIGINT", "SIGTERM"];
+  server.on("close", () => {
+    if (typeof app.locals.stopTimer === "function") {
+      app.locals.stopTimer();
+    }
+  });
+
   const shutdown = () => {
     server.close(() => process.exit(0));
   };

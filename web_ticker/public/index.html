@@ -16,6 +16,48 @@
         <p class="status" id="status">Loading quotes…</p>
       </header>
 
+      <section class="controls">
+        <form id="controls" class="control-grid">
+          <div class="control control--symbols">
+            <label for="symbolsInput">Symbols</label>
+            <div class="input-row">
+              <input
+                id="symbolsInput"
+                type="text"
+                inputmode="latin"
+                placeholder="AAPL MSFT TSLA"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <button type="submit">Update</button>
+            </div>
+            <p class="hint">Separate tickers with spaces or commas.</p>
+          </div>
+
+          <div class="control control--slider">
+            <label for="speedSlider">
+              Scroll speed <span id="speedValue">70&nbsp;ms</span>
+            </label>
+            <input id="speedSlider" type="range" min="20" max="200" step="5" value="70" />
+          </div>
+
+          <div class="control control--slider">
+            <label for="refreshSlider">
+              Refresh interval <span id="refreshValue">30&nbsp;min</span>
+            </label>
+            <input id="refreshSlider" type="range" min="5" max="720" step="5" value="30" />
+          </div>
+
+          <label class="control control--toggle" for="doubleLine">
+            <input id="doubleLine" type="checkbox" />
+            <span>
+              Two-line display
+              <small>Show alternating quotes on two stacked rows.</small>
+            </span>
+          </label>
+        </form>
+      </section>
+
       <section class="display">
         <canvas id="matrix" width="64" height="32" aria-label="Dot matrix display"></canvas>
       </section>
