@@ -1,4 +1,4 @@
-# Stock Trend CLI
+# Stock Trend CLI & Web UI
 
 ![Stock trend web UI overview](assets/web-ui.gif)
 
