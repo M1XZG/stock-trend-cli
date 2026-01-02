@@ -6,7 +6,9 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
 import sys
+from pathlib import Path
 from typing import Iterable, List, Sequence, Tuple
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -19,6 +21,15 @@ USER_AGENT = "Mozilla/5.0 (compatible; StockTrendBot/1.0; +https://github.com)"
 
 GLYPH_HEIGHT = 7
 GLYPH_WIDTH = 5
+
+# ANSI color codes
+COLOR_RESET = "\033[0m"
+COLOR_GREEN = "\033[92m"
+COLOR_RED = "\033[91m"
+COLOR_CYAN = "\033[96m"
+COLOR_YELLOW = "\033[93m"
+COLOR_BLUE = "\033[94m"
+COLOR_MAGENTA = "\033[95m"
 
 
 def _glyph(rows: Sequence[str]) -> Tuple[str, ...]:
@@ -614,7 +625,7 @@ def extract_price_points(payload: dict) -> Tuple[str, float, str, List[Tuple[dt.
     return symbol, float(current_price), currency, points
 
 
-def render_ascii_chart(points: List[Tuple[dt.date, float]], width: int = 32) -> str:
+def render_ascii_chart(points: List[Tuple[dt.date, float]], width: int = 32, use_color: bool = False) -> str:
     """Render a simple horizontal ASCII bar chart for the price points."""
 
     prices = [price for _, price in points]
@@ -629,12 +640,14 @@ def render_ascii_chart(points: List[Tuple[dt.date, float]], width: int = 32) -> 
     for date, price in points:
         normalized = (price - low) / span
         bar_len = max(1, round(normalized * width))
-        bars.append(f"{date.isoformat()} | {price:8.2f} | {'#' * bar_len}")
+        bar_color = COLOR_GREEN if price >= (low + span / 2) else COLOR_RED if use_color else ""
+        reset = COLOR_RESET if use_color else ""
+        bars.append(f"{date.isoformat()} | {price:8.2f} | {bar_color}{'#' * bar_len}{reset}")
 
     return "\n".join(bars)
 
 
-def render_ascii_bar_chart(points: List[Tuple[dt.date, float]], height: int = 10) -> str:
+def render_ascii_bar_chart(points: List[Tuple[dt.date, float]], height: int = 10, use_color: bool = False) -> str:
     """Render a vertical ASCII bar chart for the price points."""
 
     prices = [price for _, price in points]
@@ -648,25 +661,158 @@ def render_ascii_bar_chart(points: List[Tuple[dt.date, float]], height: int = 10
     heights = [max(1, round(((price - low) / span) * height)) for price in prices]
     grid = []
     for level in range(height, 0, -1):
-        row_cells = ["#" if bar_height >= level else " " for bar_height in heights]
+        row_cells = []
+        for i, bar_height in enumerate(heights):
+            if bar_height >= level:
+                bar_color = COLOR_GREEN if prices[i] >= (low + span / 2) else COLOR_RED if use_color else ""
+                reset = COLOR_RESET if use_color else ""
+                row_cells.append(f"{bar_color}#{reset}")
+            else:
+                row_cells.append(" ")
         grid.append(" ".join(row_cells))
 
     axis = "-" * (len(points) * 2 - 1)
     date_labels = " ".join(date.strftime("%m-%d") for date, _ in points)
 
+    high_color = COLOR_CYAN if use_color else ""
+    low_color = COLOR_CYAN if use_color else ""
+    reset = COLOR_RESET if use_color else ""
+
     sections = [
-        f"High: {high:.2f}",
+        f"{high_color}High: {high:.2f}{reset}",
         "\n".join(grid),
         axis,
         date_labels,
-        f"Low : {low:.2f}",
+        f"{low_color}Low : {low:.2f}{reset}",
     ]
 
     return "\n".join(sections)
 
 
-def format_summary(symbol: str, price: float, currency: str) -> str:
+def format_summary(symbol: str, price: float, currency: str, use_color: bool = False) -> str:
+    if use_color:
+        return f"Current price for {COLOR_YELLOW}{symbol}{COLOR_RESET}: {COLOR_GREEN}{price:.2f}{COLOR_RESET} {currency}"
     return f"Current price for {symbol}: {price:.2f} {currency}"
+
+
+def save_chart_images(
+    symbol: str,
+    points: List[Tuple[dt.date, float]],
+    output_dir: Path,
+    chart_width: int = 800,
+    chart_height: int = 400,
+) -> tuple[Path, Path]:
+    """Generate and save BMP and PNG chart images."""
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+    except ImportError:
+        print("Error: Pillow library is required for image generation.", file=sys.stderr)
+        print("Install it with: pip install Pillow", file=sys.stderr)
+        raise
+
+    # Create output directory if it doesn't exist
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Extract data
+    dates = [date for date, _ in points]
+    prices = [price for _, price in points]
+    low = min(prices)
+    high = max(prices)
+    span = high - low if high != low else 1
+
+    # Create image
+    img = Image.new('RGB', (chart_width, chart_height), color='white')
+    draw = ImageDraw.Draw(img)
+
+    # Define chart area with margins
+    margin_left = 60
+    margin_right = 40
+    margin_top = 40
+    margin_bottom = 60
+    chart_area_width = chart_width - margin_left - margin_right
+    chart_area_height = chart_height - margin_top - margin_bottom
+
+    # Draw title
+    title = f"{symbol} - {len(points)} Day Trend"
+    try:
+        font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 16)
+        small_font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 10)
+    except:
+        font = ImageFont.load_default()
+        small_font = ImageFont.load_default()
+
+    draw.text((chart_width // 2 - 80, 10), title, fill='black', font=font)
+
+    # Draw axes
+    draw.line(
+        [(margin_left, margin_top), (margin_left, chart_height - margin_bottom)],
+        fill='black', width=2
+    )
+    draw.line(
+        [(margin_left, chart_height - margin_bottom),
+         (chart_width - margin_right, chart_height - margin_bottom)],
+        fill='black', width=2
+    )
+
+    # Draw price labels on Y-axis
+    num_price_labels = 5
+    for i in range(num_price_labels):
+        price_val = low + (span * i / (num_price_labels - 1))
+        y_pos = chart_height - margin_bottom - (i * chart_area_height / (num_price_labels - 1))
+        draw.text((5, y_pos - 5), f"{price_val:.2f}", fill='black', font=small_font)
+        draw.line(
+            [(margin_left - 5, y_pos), (margin_left, y_pos)],
+            fill='black', width=1
+        )
+
+    # Calculate bar width
+    bar_width = chart_area_width / len(points)
+    bar_spacing = bar_width * 0.2
+    actual_bar_width = bar_width - bar_spacing
+
+    # Draw bars and date labels
+    for i, (date, price) in enumerate(points):
+        # Calculate bar position and height
+        x_pos = margin_left + (i * bar_width) + (bar_spacing / 2)
+        normalized_height = ((price - low) / span) * chart_area_height
+        bar_top = chart_height - margin_bottom - normalized_height
+        bar_bottom = chart_height - margin_bottom
+
+        # Choose color (green for higher, blue for lower)
+        bar_color = '#4CAF50' if price >= (low + span / 2) else '#2196F3'
+
+        # Draw bar
+        draw.rectangle(
+            [x_pos, bar_top, x_pos + actual_bar_width, bar_bottom],
+            fill=bar_color, outline='black'
+        )
+
+        # Draw date label (show every nth date to avoid crowding)
+        if len(points) <= 10 or i % max(1, len(points) // 10) == 0:
+            date_str = date.strftime("%m/%d")
+            draw.text(
+                (x_pos, chart_height - margin_bottom + 5),
+                date_str, fill='black', font=small_font
+            )
+
+    # Draw legend
+    legend_y = chart_height - 20
+    draw.text((margin_left, legend_y), f"Low: {low:.2f}", fill='black', font=small_font)
+    draw.text(
+        (chart_width // 2 - 30, legend_y),
+        f"High: {high:.2f}", fill='black', font=small_font
+    )
+
+    # Generate timestamp for unique filenames
+    timestamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+    bmp_path = output_dir / f"{symbol}_{timestamp}.bmp"
+    png_path = output_dir / f"{symbol}_{timestamp}.png"
+
+    # Save images
+    img.save(bmp_path, 'BMP')
+    img.save(png_path, 'PNG')
+
+    return bmp_path, png_path
 
 
 def main(argv: List[str] | None = None) -> int:
@@ -694,6 +840,20 @@ def main(argv: List[str] | None = None) -> int:
         help=(
             "ASCII chart style: 'rows' for horizontal bars, 'bars' for vertical bar chart"
         ),
+    )
+    parser.add_argument(
+        "-c",
+        "--colour",
+        "--color",
+        action="store_true",
+        dest="colour",
+        help="Enable colored output in the terminal",
+    )
+    parser.add_argument(
+        "--save-charts",
+        metavar="DIR",
+        type=str,
+        help="Generate and save BMP and PNG chart images to the specified directory",
     )
     parser.add_argument(
         "--ticker",
@@ -737,17 +897,40 @@ def main(argv: List[str] | None = None) -> int:
         return 1
 
     for info in summaries:
-        print(format_summary(info["symbol"], info["price"], info["currency"]))
+        print(format_summary(info["symbol"], info["price"], info["currency"], use_color=args.colour))
 
     if first_points and first_chart_symbol:
         renderers = {
-            "rows": render_ascii_chart,
-            "bars": render_ascii_bar_chart,
+            "rows": lambda pts: render_ascii_chart(pts, use_color=args.colour),
+            "bars": lambda pts: render_ascii_bar_chart(pts, use_color=args.colour),
         }
         renderer = renderers[args.chart]
 
-        print(f"\n{days}-day trend ({args.chart}) for {first_chart_symbol}:")
+        color_prefix = COLOR_MAGENTA if args.colour else ""
+        color_suffix = COLOR_RESET if args.colour else ""
+        print(f"\n{color_prefix}{days}-day trend ({args.chart}) for {first_chart_symbol}:{color_suffix}")
         print(renderer(first_points))
+
+    # Save chart images if requested
+    if args.save_charts and first_points and first_chart_symbol:
+        try:
+            output_dir = Path(args.save_charts)
+            bmp_path, png_path = save_chart_images(
+                first_chart_symbol,
+                first_points,
+                output_dir
+            )
+            success_color = COLOR_GREEN if args.colour else ""
+            reset = COLOR_RESET if args.colour else ""
+            print(f"\n{success_color}Charts saved:{reset}")
+            print(f"  BMP: {bmp_path}")
+            print(f"  PNG: {png_path}")
+        except ImportError:
+            pass  # Error already printed in save_chart_images
+        except Exception as exc:
+            error_color = COLOR_RED if args.colour else ""
+            reset = COLOR_RESET if args.colour else ""
+            print(f"{error_color}Error saving charts: {exc}{reset}", file=sys.stderr)
 
     if args.ticker:
         ticker_messages = [
