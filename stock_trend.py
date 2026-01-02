@@ -33,7 +33,15 @@ COLOR_MAGENTA = "\033[95m"
 
 
 def _glyph(rows: Sequence[str]) -> Tuple[str, ...]:
-    """Normalize glyph rows to a fixed width."""
+    """
+    Normalize and pad glyph row strings to a fixed width for the 5x7 font.
+    
+    Parameters:
+        rows (Sequence[str]): Iterable of row strings for a glyph; each row will be left-justified and truncated to GLYPH_WIDTH characters.
+    
+    Returns:
+        Tuple[str, ...]: Tuple of strings each exactly GLYPH_WIDTH characters long representing the normalized glyph rows.
+    """
 
     normalized = []
     for row in rows:
@@ -587,7 +595,22 @@ def fetch_chart_payload(symbol: str, days: int) -> dict:
 
 
 def extract_price_points(payload: dict) -> Tuple[str, float, str, List[Tuple[dt.date, float]]]:
-    """Extract meta information and daily close points from payload."""
+    """
+    Extract the symbol, current price, currency, and daily closing price points from a Yahoo Finance chart payload.
+    
+    Parameters:
+        payload (dict): Parsed JSON payload from the Yahoo Finance chart API (expected to contain a top-level "chart" object with "result" and/or "error" fields).
+    
+    Returns:
+        Tuple[str, float, str, List[Tuple[dt.date, float]]]: A tuple of
+            - symbol: the ticker symbol (e.g., "AAPL"),
+            - current_price: the current market price (falls back to the last closing price if missing),
+            - currency: the currency code (e.g., "USD"),
+            - points: a list of (date, closing_price) tuples in chronological order.
+    
+    Raises:
+        StockLookupError: If the provider reports an error, no results are returned, or there are no valid closing prices in the payload.
+    """
 
     chart = payload.get("chart", {})
     errors = chart.get("error")
@@ -626,7 +649,17 @@ def extract_price_points(payload: dict) -> Tuple[str, float, str, List[Tuple[dt.
 
 
 def render_ascii_chart(points: List[Tuple[dt.date, float]], width: int = 32, use_color: bool = False) -> str:
-    """Render a simple horizontal ASCII bar chart for the price points."""
+    """
+    Render a horizontal ASCII bar chart of the given price points.
+    
+    Parameters:
+        points (List[Tuple[datetime.date, float]]): Sequence of (date, price) pairs to plot.
+        width (int): Maximum width in characters for the longest bar.
+        use_color (bool): If true, color bars above the mid-range with green and others with red using ANSI codes.
+    
+    Returns:
+        str: Multiline string where each line is "YYYY-MM-DD | PRICE | BAR", with BAR composed of '#' characters sized proportionally to price and optionally colorized.
+    """
 
     prices = [price for _, price in points]
     low = min(prices)
@@ -648,7 +681,17 @@ def render_ascii_chart(points: List[Tuple[dt.date, float]], width: int = 32, use
 
 
 def render_ascii_bar_chart(points: List[Tuple[dt.date, float]], height: int = 10, use_color: bool = False) -> str:
-    """Render a vertical ASCII bar chart for the price points."""
+    """
+    Render a vertical ASCII bar chart of the given price history.
+    
+    Parameters:
+        points (List[Tuple[datetime.date, float]]): Sequence of (date, price) pairs plotted left-to-right.
+        height (int): Number of text rows used for the chart's vertical scale.
+        use_color (bool): If True, apply ANSI color codes to bar segments and the High/Low labels.
+    
+    Returns:
+        chart (str): Multi-line string containing the vertical bar chart, an axis line, date labels, and High/Low legend.
+    """
 
     prices = [price for _, price in points]
     low = min(prices)
@@ -690,6 +733,17 @@ def render_ascii_bar_chart(points: List[Tuple[dt.date, float]], height: int = 10
 
 
 def format_summary(symbol: str, price: float, currency: str, use_color: bool = False) -> str:
+    """
+    Format a one-line current-price summary for a stock symbol, optionally using ANSI color escape sequences.
+    
+    When color is enabled, the symbol is wrapped with a yellow ANSI sequence and the numeric price is wrapped with a green ANSI sequence.
+    
+    Parameters:
+        use_color (bool): If True, include ANSI color codes around the symbol and price.
+    
+    Returns:
+        A single-line string of the form "Current price for SYMBOL: 123.45 CURRENCY", with symbol and price colorized when `use_color` is True.
+    """
     if use_color:
         return f"Current price for {COLOR_YELLOW}{symbol}{COLOR_RESET}: {COLOR_GREEN}{price:.2f}{COLOR_RESET} {currency}"
     return f"Current price for {symbol}: {price:.2f} {currency}"
@@ -702,7 +756,22 @@ def save_chart_images(
     chart_width: int = 800,
     chart_height: int = 400,
 ) -> tuple[Path, Path]:
-    """Generate and save BMP and PNG chart images."""
+    """
+    Generate and save bar-chart images (BMP and PNG) for a symbol's price history.
+    
+    Parameters:
+        symbol (str): Stock symbol used in the chart title and filenames.
+        points (List[Tuple[dt.date, float]]): Sequence of (date, closing price) points to plot; order is left-to-right.
+        output_dir (Path): Directory where generated files will be written; created if it does not exist.
+        chart_width (int): Width in pixels of the generated image (default 800).
+        chart_height (int): Height in pixels of the generated image (default 400).
+    
+    Returns:
+        tuple[Path, Path]: Paths to the saved BMP and PNG files, respectively.
+    
+    Raises:
+        ImportError: If the Pillow (PIL) library is not available.
+    """
     try:
         from PIL import Image, ImageDraw, ImageFont
     except ImportError:
@@ -816,6 +885,17 @@ def save_chart_images(
 
 
 def main(argv: List[str] | None = None) -> int:
+    """
+    Entry point for the CLI tool that fetches stock prices, displays ASCII charts, optionally saves chart images, and can launch a dot-matrix ticker window.
+    
+    This function parses command-line arguments (or the supplied argv list), fetches price data for one or more ticker symbols, prints a one-line summary for each symbol, renders and prints an ASCII chart for the first symbol (style selectable), optionally saves BMP/PNG chart images to a directory, and optionally launches a GUI dot-matrix ticker that scrolls the symbols and prices.
+    
+    Parameters:
+        argv (List[str] | None): Command-line arguments to parse. If None, the system argv is used.
+    
+    Returns:
+        int: Exit code where `0` indicates success, `1` indicates a data fetch or validation error (e.g., stock lookup failure or invalid argument), and other non-zero values may be returned for GUI/ticker related failures or unexpected runtime errors.
+    """
     parser = argparse.ArgumentParser(
         description="Fetch the current stock price, display ASCII charts, and optionally launch a dot-matrix ticker.",
     )
