@@ -640,7 +640,7 @@ def render_ascii_chart(points: List[Tuple[dt.date, float]], width: int = 32, use
     for date, price in points:
         normalized = (price - low) / span
         bar_len = max(1, round(normalized * width))
-        bar_color = COLOR_GREEN if price >= (low + span / 2) else COLOR_RED if use_color else ""
+        bar_color = (COLOR_GREEN if price >= (low + span / 2) else COLOR_RED) if use_color else ""
         reset = COLOR_RESET if use_color else ""
         bars.append(f"{date.isoformat()} | {price:8.2f} | {bar_color}{'#' * bar_len}{reset}")
 
@@ -664,7 +664,7 @@ def render_ascii_bar_chart(points: List[Tuple[dt.date, float]], height: int = 10
         row_cells = []
         for i, bar_height in enumerate(heights):
             if bar_height >= level:
-                bar_color = COLOR_GREEN if prices[i] >= (low + span / 2) else COLOR_RED if use_color else ""
+                bar_color = (COLOR_GREEN if prices[i] >= (low + span / 2) else COLOR_RED) if use_color else ""
                 reset = COLOR_RESET if use_color else ""
                 row_cells.append(f"{bar_color}#{reset}")
             else:
