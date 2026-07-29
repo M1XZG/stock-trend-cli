@@ -8,7 +8,7 @@
     "test": "echo \"No web tests yet\""
   },
   "dependencies": {
-    "express": "^4.19.2",
+    "express": "^4.22.2",
     "node-fetch": "^3.3.2",
     "open": "^10.1.0"
   }
